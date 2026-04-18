@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, ShoppingBag, User, Menu, X, Star, ChevronRight, Truck, ShieldCheck, ArrowRight, Plus, Minus, Trash2, CheckCircle } from 'lucide-react';
+import { Search, ShoppingBag, User, Menu, X, Star, ChevronRight, Truck, ShieldCheck, ArrowRight, Plus, Minus, Trash2, CheckCircle, ArrowLeft } from 'lucide-react';
 import { PRODUCTS, CATEGORIES, Product } from './data';
 
 function App() {
@@ -7,6 +7,9 @@ function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState<{product: Product, quantity: number}[]>([]);
   const [orderComplete, setOrderComplete] = useState(false);
+  const [isCheckout, setIsCheckout] = useState(false);
+  const [customerDetails, setCustomerDetails] = useState({ name: '', mobile: '', address: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const addToCart = (product: Product) => {
     setCartItems(prev => {
@@ -18,6 +21,7 @@ function App() {
     });
     setIsCartOpen(true);
     setOrderComplete(false);
+    setIsCheckout(false);
   };
 
   const updateQuantity = (id: string, delta: number) => {
@@ -33,15 +37,62 @@ function App() {
     setCartItems(prev => prev.filter(item => item.product.id !== id));
   };
 
-  const handleCheckout = () => {
+  const handleCheckoutClick = () => {
     if (cartItems.length > 0) {
+      setIsCheckout(true);
+    }
+  };
+
+  const handleConfirmOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    const currentTotal = cartItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+    const finalAmount = currentTotal + (currentTotal > 999 ? 0 : 99);
+    const itemsList = cartItems.map(i => `${i.product.name} (x${i.quantity})`).join(', ');
+
+    const formData = new FormData();
+    formData.append('name', customerDetails.name);
+    formData.append('mobile', customerDetails.mobile);
+    formData.append('address', customerDetails.address);
+    formData.append('orderTotal', `Rs. ${finalAmount}`);
+    formData.append('items', itemsList);
+
+    try {
+      // YAHAN APNA GOOGLE SCRIPT URL DALIYE:
+      const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx6hXMzYOfC-iAcEkxjDI9BqxbPZ1jdnrU6zsphpmqZW4wiLCqBGOp_BMqGaGMZqOc/exec';
+
+      if (GOOGLE_SCRIPT_URL !== 'https://script.google.com/macros/s/AKfycbx6hXMzYOfC-iAcEkxjDI9BqxbPZ1jdnrU6zsphpmqZW4wiLCqBGOp_BMqGaGMZqOc/exec') {
+        await fetch(GOOGLE_SCRIPT_URL, {
+          method: 'POST',
+          body: formData,
+          mode: 'no-cors' // Ye frontend mein block hone se bachayega
+        });
+      } else {
+        // Agar URL set nahi hai toh sirf 1 second ki processing dikhegi (Demo mode)
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        console.log("Mock Order Submitted:", { name: customerDetails.name, items: itemsList, total: finalAmount });
+      }
+
       setOrderComplete(true);
+      setIsCheckout(false);
       setCartItems([]);
+      setCustomerDetails({ name: '', mobile: '', address: '' }); // Reset
       setTimeout(() => {
         setOrderComplete(false);
         setIsCartOpen(false);
       }, 5000);
+    } catch (error) {
+      console.error('Checkout error:', error);
+      alert('Network error. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
+  };
+
+  const closeCart = () => {
+    setIsCartOpen(false);
+    setTimeout(() => setIsCheckout(false), 300); // Reset checkout state after animation
   };
 
   const cartTotal = cartItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
@@ -52,11 +103,20 @@ function App() {
       
       {/* Cart Drawer */}
       <div className={`fixed inset-0 z-[100] transition-opacity duration-300 ${isCartOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsCartOpen(false)} />
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeCart} />
         <div className={`absolute right-0 top-0 h-full w-full max-w-md bg-[#FFFBF9] shadow-2xl transition-transform duration-500 ease-in-out transform flex flex-col ${isCartOpen ? 'translate-x-0' : 'translate-x-full'}`}>
           <div className="flex items-center justify-between p-6 border-b border-[#331A21]/10 bg-[#FAF1EE]">
-            <h2 className="font-serif text-2xl text-[#6B2132]">Your Cart</h2>
-            <button onClick={() => setIsCartOpen(false)} className="text-[#331A21] hover:text-[#6B2132] transition">
+            <div className="flex items-center gap-3">
+              {isCheckout && !orderComplete && (
+                <button onClick={() => setIsCheckout(false)} className="text-[#331A21] hover:text-[#6B2132] transition">
+                  <ArrowLeft size={24} />
+                </button>
+              )}
+              <h2 className="font-serif text-2xl text-[#6B2132]">
+                {orderComplete ? 'Status' : isCheckout ? 'Delivery Details' : 'Your Cart'}
+              </h2>
+            </div>
+            <button onClick={closeCart} className="text-[#331A21] hover:text-[#6B2132] transition">
               <X size={24} />
             </button>
           </div>
@@ -67,17 +127,58 @@ function App() {
                 <div className="w-20 h-20 bg-[#6B2132]/10 rounded-full flex items-center justify-center">
                   <CheckCircle size={40} className="text-[#6B2132]" />
                 </div>
-                <h3 className="font-serif text-2xl text-[#6B2132]">Order Confirmed!</h3>
-                <p className="text-[#665359]">Thank you for shopping with Pathak Cosmetics.<br/>Your Cash on Delivery (COD) order has been placed.</p>
-                <button onClick={() => setIsCartOpen(false)} className="px-6 py-3 bg-[#6B2132] text-white tracking-[2px] uppercase text-xs hover:bg-[#501624] transition mt-6">
+                <h3 className="font-serif text-2xl text-[#6B2132]">Order Placed!</h3>
+                <p className="text-[#665359]">Thank you for shopping with Pathak Cosmetics.<br/>Your Cash on Delivery (COD) order has been confirmed.</p>
+                <button onClick={closeCart} className="px-6 py-3 bg-[#6B2132] text-white tracking-[2px] uppercase text-xs hover:bg-[#501624] transition mt-6">
                   Continue Shopping
                 </button>
               </div>
+            ) : isCheckout ? (
+              <form id="checkout-form" onSubmit={handleConfirmOrder} className="space-y-5 animate-in slide-in-from-right-4 duration-300 text-left">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-[2px] text-[#A68F94] mb-2 font-bold">Full Name</label>
+                  <input 
+                    required 
+                    type="text" 
+                    value={customerDetails.name} 
+                    onChange={e => setCustomerDetails({...customerDetails, name: e.target.value})} 
+                    className="w-full px-4 py-3.5 bg-white border border-[#EBD1CE] focus:outline-none focus:border-[#6B2132] focus:ring-1 focus:ring-[#6B2132]/20 text-sm text-[#331A21] transition-all rounded-sm" 
+                    placeholder="Enter your name" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-[2px] text-[#A68F94] mb-2 font-bold">Mobile Number</label>
+                  <input 
+                    required 
+                    type="tel" 
+                    pattern="[0-9]{10}"
+                    title="Please enter a valid 10-digit mobile number" 
+                    value={customerDetails.mobile} 
+                    onChange={e => setCustomerDetails({...customerDetails, mobile: e.target.value})} 
+                    className="w-full px-4 py-3.5 bg-white border border-[#EBD1CE] focus:outline-none focus:border-[#6B2132] focus:ring-1 focus:ring-[#6B2132]/20 text-sm text-[#331A21] transition-all rounded-sm" 
+                    placeholder="10-digit mobile number" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-[2px] text-[#A68F94] mb-2 font-bold">Delivery Address</label>
+                  <textarea 
+                    required 
+                    rows={4} 
+                    value={customerDetails.address} 
+                    onChange={e => setCustomerDetails({...customerDetails, address: e.target.value})} 
+                    className="w-full px-4 py-3.5 bg-white border border-[#EBD1CE] focus:outline-none focus:border-[#6B2132] focus:ring-1 focus:ring-[#6B2132]/20 text-sm text-[#331A21] resize-none transition-all rounded-sm" 
+                    placeholder="Enter your full address with pincode"
+                  ></textarea>
+                </div>
+                <div className="bg-[#FAF1EE] p-4 text-xs text-[#665359] border border-[#EBD1CE] rounded-sm mt-4">
+                  <span className="font-semibold text-[#6B2132]">Note:</span> You will pay ₹{cartTotal + (cartTotal > 999 ? 0 : 99)} in cash when your order is delivered.
+                </div>
+              </form>
             ) : cartItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center space-y-4 text-[#665359]">
                 <ShoppingBag size={48} strokeWidth={1} />
                 <p className="uppercase tracking-[2px] text-xs">Your bag is empty</p>
-                <button onClick={() => setIsCartOpen(false)} className="px-6 py-3 border border-[#331A21] text-[#331A21] tracking-[2px] uppercase text-xs hover:bg-[#331A21] hover:text-white transition mt-4">
+                <button onClick={closeCart} className="px-6 py-3 border border-[#331A21] text-[#331A21] tracking-[2px] uppercase text-xs hover:bg-[#331A21] hover:text-white transition mt-4">
                   Explore Products
                 </button>
               </div>
@@ -127,13 +228,25 @@ function App() {
                   <span>₹{cartTotal + (cartTotal > 999 ? 0 : 99)}</span>
                 </div>
               </div>
-              <button 
-                onClick={handleCheckout}
-                className="w-full py-4 bg-[#6B2132] text-white text-xs font-bold uppercase tracking-[2px] hover:bg-[#501624] transition-colors shadow-lg shadow-[#6B2132]/30 flex flex-col items-center justify-center gap-1"
-              >
-                <span>Confirm Order via C.O.D.</span>
-                <span className="text-[10px] font-normal tracking-normal text-white/80 capitalize">Cash on Delivery Available</span>
-              </button>
+              
+              {!isCheckout ? (
+                <button 
+                  onClick={handleCheckoutClick}
+                  className="w-full py-4 bg-[#6B2132] text-white text-xs font-bold uppercase tracking-[2px] hover:bg-[#501624] transition-colors shadow-lg shadow-[#6B2132]/30 flex flex-col items-center justify-center gap-1"
+                >
+                  <span>Proceed to Checkout</span>
+                </button>
+              ) : (
+                <button 
+                  type="submit"
+                  form="checkout-form"
+                  disabled={isSubmitting}
+                  className={`w-full py-4 bg-[#6B2132] text-white text-xs font-bold uppercase tracking-[2px] hover:bg-[#501624] transition-colors shadow-lg shadow-[#6B2132]/30 flex flex-col items-center justify-center gap-1 ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}`}
+                >
+                  <span>{isSubmitting ? 'Processing...' : 'Place Order'}</span>
+                  {!isSubmitting && <span className="text-[10px] font-normal tracking-normal text-white/80 capitalize">Cash on Delivery</span>}
+                </button>
+              )}
             </div>
           )}
         </div>
